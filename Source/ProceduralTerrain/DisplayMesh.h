@@ -25,24 +25,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, VisibleAnywhere)
 		UProceduralMeshComponent* CustomMesh = nullptr;
 
-	//UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	//TArray<FVector> Vertices;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-		TArray<int32> Triangles;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-		TArray<FVector> Normals;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-		TArray<FProcMeshTangent> Tangents;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-		TArray<FVector2D> UVs;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-		TArray<FColor> Colors;
-
 	TArray<float> NoiseMap;
 
 protected:
@@ -58,7 +40,7 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	void AddTriangle(const int BottomLeft, const int TopLeft, const int BottomRight, int32& TriIndex);
+	void AddTriangle(const int BottomLeft, const int TopLeft, const int BottomRight, int32& TriIndex, TArray<int32> &Triangles);
 
 	void GenerateNoiseMapData();
 
@@ -66,7 +48,9 @@ public:
 
 	void GenerateMeshTexture();
 
-	void AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY);
+	void GenerateNormals(int Width, int Height, int TopLeftX, int TopLeftY, TArray<FVector> &Normals);
+	
+	void AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY, TArray<FVector> &Normals);
 
 	FLinearColor GetNoiseColor(float noiseValue);
 

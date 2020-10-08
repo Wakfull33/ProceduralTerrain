@@ -69,6 +69,11 @@ void ADisplayMesh::GenerateTerrainMesh()
 	const float TopLeftY = (Height - 1) / 2.f;
 
 	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FProcMeshTangent> Tangents;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colors;
 
 	Vertices.Reset();
 	Triangles.Reset();
@@ -104,39 +109,20 @@ void ADisplayMesh::GenerateTerrainMesh()
 
 			if (x < Width - 1 && y < Height - 1)
 			{
-				AddTriangle(vertexIndex + 1, vertexIndex + Width + 1, vertexIndex + Width, TriangleIndexCount);
-				AddTriangle(vertexIndex + Width, vertexIndex, vertexIndex + 1, TriangleIndexCount);
+				AddTriangle(vertexIndex + 1, vertexIndex + Width + 1, vertexIndex + Width, TriangleIndexCount, Triangles);
+				AddTriangle(vertexIndex + Width, vertexIndex, vertexIndex + 1, TriangleIndexCount, Triangles);
 			}
 			vertexIndex++;
 		}
 	}
 
-	for (int yd = 0; yd < MapGeneratorComp->MapHeight; yd++)
-	{
-		for (int xd = 0; xd < MapGeneratorComp->MapWidth; xd++)
-		{
-			if (yd != Height - 1)
-			{
-				if (xd != Width - 1)
-					AddNormal(xd + (yd * Width), (xd + 1) + (yd * Width), xd + ((yd + 1) * Width), TopLeftX, TopLeftY);
-				else
-					AddNormal(xd + (yd * Width), xd + ((yd + 1) * Width), (xd - 1) + (yd * Width), TopLeftX, TopLeftY);
-			}
-			else
-			{
-				if (xd != Width - 1)
-					AddNormal(xd + (yd * Width), xd + ((yd - 1) * Width), (xd + 1) + ((yd - 1) * Width), TopLeftX, TopLeftY);
-				else
-					AddNormal(xd + (yd * Width), (xd - 1) + (yd * Width), xd + ((yd - 1) * Width), TopLeftX, TopLeftY);
-			}
-		}
-	}
+	GenerateNormals(Width, Height, TopLeftX, TopLeftY, Normals);
 
 	CustomMesh->ClearAllMeshSections();
-	CustomMesh->CreateMeshSection(0, Vertices, Triangles, Normals, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+	CustomMesh->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
 }
 
-void ADisplayMesh::AddTriangle(const int BottomLeft, const int TopLeft, const int BottomRight, int32& TriIndex)
+void ADisplayMesh::AddTriangle(const int BottomLeft, const int TopLeft, const int BottomRight, int32& TriIndex, TArray<int32> &Triangles)
 {
 
 	int32 Point1 = TriIndex++;
@@ -218,7 +204,32 @@ void ADisplayMesh::GenerateMeshTexture()
 	}
 }
 
-void ADisplayMesh::AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY)
+void ADisplayMesh::GenerateNormals(int Width, int Height, int TopLeftX, int TopLeftY, TArray<FVector> &Normals)
+{
+	for (int y = 0; y < Height; y++)
+	{
+		for (int x = 0; x < Width; x++)
+		{
+			if (y != Height - 1)
+			{
+				if (x != Width - 1)
+					AddNormal(x + (y * Width), (x + 1) + (y * Width), x + ((y + 1) * Width), TopLeftX, TopLeftY, Normals);
+				else
+					AddNormal(x + (y * Width), x + ((y + 1) * Width), (x - 1) + (y * Width), TopLeftX, TopLeftY, Normals);
+			}
+			else
+			{
+				if (x != Width - 1)
+					AddNormal(x + (y * Width), x + ((y - 1) * Width), (x + 1) + ((y - 1) * Width), TopLeftX, TopLeftY, Normals);
+				else
+					AddNormal(x + (y * Width), (x - 1) + (y * Width), x + ((y - 1) * Width), TopLeftX, TopLeftY, Normals);
+			}
+		}
+	}
+}
+
+
+void ADisplayMesh::AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY, TArray<FVector> &Normals)
 {
 	//UE_LOG(LogTemp, Warning, TEXT("AddNormal"))
 
