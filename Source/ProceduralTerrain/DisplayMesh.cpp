@@ -2,12 +2,11 @@
 
 
 #include "DisplayMesh.h"
-#include "MapGeneratorComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "ImageUtils.h"
 #include "Kismet/KismetMathLibrary.h"
-#include "NoiseGenerator.h"
+#include "FastNoise.h"
 
 // Sets default values
 ADisplayMesh::ADisplayMesh()
@@ -16,25 +15,18 @@ ADisplayMesh::ADisplayMesh()
 	PrimaryActorTick.bCanEverTick = true;
 
 	USceneComponent* RootComp = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	MapGeneratorComp = CreateDefaultSubobject<UMapGeneratorComponent>(TEXT("MapGeneratorComp"));
 	CustomMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMeshComp"));
 
 	RootComponent = RootComp;
 	CustomMesh->SetupAttachment(RootComponent);
-
-	UE_LOG(LogTemp, Warning, TEXT("ADisplayMesh"))
-
-
 }
 
 // Called when the game starts or when spawned
 void ADisplayMesh::BeginPlay()
 {
 	Super::BeginPlay();
-	//UE_LOG(LogTemp, Warning, TEXT("BeginPlay"))
 
 	GenerateMeshTexture();
-	//MapGeneratorComp->GenerateMap();
 }
 
 // Called every frame
@@ -44,27 +36,10 @@ void ADisplayMesh::Tick(float DeltaTime)
 
 }
 
-void ADisplayMesh::GenerateNoiseMapData()
-{
-	//UE_LOG(LogTemp, Warning, TEXT("GenerateNoiseMapData"))
-
-	NoiseMap = NoiseGenerator::GenerateNoiseMap(
-		MapGeneratorComp->MapWidth,
-		MapGeneratorComp->MapHeight,
-		MapGeneratorComp->Seed,
-		MapGeneratorComp->NoiseScale,
-		MapGeneratorComp->Octaves,
-		MapGeneratorComp->Persistance,
-		MapGeneratorComp->Lacunarity,
-		MapGeneratorComp->Offset);
-}
-
 void ADisplayMesh::GenerateTerrainMesh()
 {
-	//UE_LOG(LogTemp, Warning, TEXT("GenerateTerrainMesh"))
-
-	const int Width = MapGeneratorComp->MapWidth;
-	const int Height = MapGeneratorComp->MapHeight;
+	const int Width = NoiseParameters.MapWidth;
+	const int Height = NoiseParameters.MapHeight;
 	const float TopLeftX = (Width - 1) / -2.f;
 	const float TopLeftY = (Height - 1) / 2.f;
 
@@ -93,7 +68,6 @@ void ADisplayMesh::GenerateTerrainMesh()
 	int32 NormalIndexCount = 0;
 	int32 TangentIndexCount = 0;
 
-	FVector DefinedShape[3];
 	FProcMeshTangent TangentSetup = FProcMeshTangent(0.0f, 1.0f, 0.0f);
 
 	int vertexIndex = 0;
@@ -102,10 +76,9 @@ void ADisplayMesh::GenerateTerrainMesh()
 	{
 		for (int x = 0; x < Width; x++)
 		{
-			Vertices[x + y * Width] = (FVector((TopLeftX + x) * 10, (TopLeftY - y) * 10, NoiseMap[x + y * Width] * 100));
+			Vertices[x + y * Width] = (FVector((TopLeftX + x) * NoiseParameters.MapScale, (TopLeftY - y) * NoiseParameters.MapScale, GetNoiseValueAtIndex(x, y)));
 			UVs[x + y * Width] = (FVector2D(x / (float)Width, y / (float)Height));
-			Colors[x + y * Width] = (GetNoiseColor(NoiseMap[x + y * Width]).ToFColor(false));
-
+			//Colors[x + y * Width] = (GetNoiseColor(GetNoiseValueAtIndex(x, y)).ToFColor(false));
 
 			if (x < Width - 1 && y < Height - 1)
 			{
@@ -137,27 +110,34 @@ void ADisplayMesh::AddTriangle(const int BottomLeft, const int TopLeft, const in
 void ADisplayMesh::PostActorCreated()
 {
 	Super::PostActorCreated();
-	//UE_LOG(LogTemp, Warning, TEXT("PostActorCreated"))
 }
 
 void ADisplayMesh::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
-	//UE_LOG(LogTemp, Warning, TEXT("PostInitializeComponents"))
 
-	GenerateNoiseMapData();
+	//GenerateNoiseMapData();
 	GenerateTerrainMesh();
 }
 
-FLinearColor ADisplayMesh::GetNoiseColor(const float noiseValue)
+void ADisplayMesh::PostEditChangeProperty(FPropertyChangedEvent & PropertyChangedEvent)
 {
-	FLinearColor color;
+	//UE_LOG(LogTemp, Warning, TEXT("Property: %s Changed !!!"), *PropertyChangedEvent.GetPropertyName().ToString())
+	//GenerateNoiseMapData();
+	//GenerateTerrainMesh();
+}
 
-	for (auto& region : MapGeneratorComp->regions)
+FColor ADisplayMesh::GetNoiseColor(const float noiseValue)
+{
+	FColor color;
+
+	for (auto& region : NoiseParameters.regions)
 	{
 		if (noiseValue < region.height)
+		{
 			color = region.color;
-		break;
+			break;
+		}
 	}
 
 	return color;
@@ -165,26 +145,26 @@ FLinearColor ADisplayMesh::GetNoiseColor(const float noiseValue)
 
 void ADisplayMesh::GenerateMeshTexture()
 {
-	//UE_LOG(LogTemp, Warning, TEXT("GenerateMeshTexture"))
-
-	int width = MapGeneratorComp->MapWidth;
-	int height = MapGeneratorComp->MapHeight;
+	int width = NoiseParameters.MapWidth;
+	int height = NoiseParameters.MapHeight;
 
 	TArray<FColor> ColorMap;
-	ColorMap.Init(FColor::Black, NoiseMap.Num());
+	ColorMap.Init(FColor::Black, width * height);
 
 	for (int y = 0; y < height; ++y)
 	{
 		for (int x = 0; x < width; ++x)
 		{
-			ColorMap[x + y * width] = UKismetMathLibrary::LinearColorLerp(FLinearColor::Black, FLinearColor::White, NoiseMap[x + (y * width)]).ToFColor(false);
+			ColorMap[x + y * width] = GetNoiseColor(GetNoiseValueAtIndex(x, y));
 		}
 	}
 
 	UTexture2D* NoiseTexture = nullptr;
-
-	NoiseTexture = FImageUtils::CreateTexture2D(width, height, ColorMap, this, FString("NoiseTexture"), EObjectFlags::RF_Public | EObjectFlags::RF_Transient, FCreateTexture2DParameters());
-	NoiseTexture->Filter = TextureFilter::TF_Nearest;
+	
+	FCreateTexture2DParameters Texture2DParameters;
+	Texture2DParameters.TextureGroup = TEXTUREGROUP_Pixels2D;
+	
+	NoiseTexture = FImageUtils::CreateTexture2D(width, height, ColorMap, this, FString("NoiseTexture"), EObjectFlags::RF_Public | EObjectFlags::RF_Transient, Texture2DParameters);
 
 	UMaterialInstanceDynamic* Material = nullptr;
 	UMaterialInterface* LoadedMaterial = CustomMesh->GetMaterial(0);
@@ -194,13 +174,15 @@ void ADisplayMesh::GenerateMeshTexture()
 
 		if (Material)
 		{
-			//Here we're applying your texture to the material
 			Material->SetTextureParameterValue(TEXT("NoiseTexture"), NoiseTexture);
 
-			//Finally, apply the material to your mesh component
 			if (CustomMesh)
 				CustomMesh->SetMaterial(0, Material);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Material Not Found :/"))
 	}
 }
 
@@ -228,18 +210,15 @@ void ADisplayMesh::GenerateNormals(int Width, int Height, int TopLeftX, int TopL
 	}
 }
 
-
 void ADisplayMesh::AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY, TArray<FVector> &Normals)
 {
-	//UE_LOG(LogTemp, Warning, TEXT("AddNormal"))
-
 	const FIntPoint Point1 = GetIndexValue(Vertice1);
 	const FIntPoint Point2 = GetIndexValue(Vertice2);
 	const FIntPoint Point3 = GetIndexValue(Vertice3);
 
-	const FVector Vertex1 = FVector((TopLeftX + Point1.X) * MapGeneratorComp->MapScale, (TopLeftY - Point1.Y) * MapGeneratorComp->MapScale, NoiseMap[Point1.X + Point1.Y * MapGeneratorComp->MapWidth] * MapGeneratorComp->MapHeightScale);
-	const FVector Vertex2 = FVector((TopLeftX + Point2.X) * MapGeneratorComp->MapScale, (TopLeftY - Point2.Y) * MapGeneratorComp->MapScale, NoiseMap[Point2.X + Point2.Y * MapGeneratorComp->MapWidth] * MapGeneratorComp->MapHeightScale);
-	const FVector Vertex3 = FVector((TopLeftX + Point3.X) * MapGeneratorComp->MapScale, (TopLeftY - Point3.Y) * MapGeneratorComp->MapScale, NoiseMap[Point3.X + Point3.Y * MapGeneratorComp->MapWidth] * MapGeneratorComp->MapHeightScale);
+	const FVector Vertex1 = FVector((TopLeftX + Point1.X) * NoiseParameters.MapScale, (TopLeftY - Point1.Y) * NoiseParameters.MapScale, GetNoiseValueAtIndex(Point1.X, Point1.Y));
+	const FVector Vertex2 = FVector((TopLeftX + Point2.X) * NoiseParameters.MapScale, (TopLeftY - Point2.Y) * NoiseParameters.MapScale, GetNoiseValueAtIndex(Point2.X, Point2.Y));
+	const FVector Vertex3 = FVector((TopLeftX + Point3.X) * NoiseParameters.MapScale, (TopLeftY - Point3.Y) * NoiseParameters.MapScale, GetNoiseValueAtIndex(Point3.X, Point3.Y));
 
 	FVector Normal1 = FVector::CrossProduct((Vertex3 - Vertex1), (Vertex2 - Vertex1));
 
@@ -250,6 +229,60 @@ void ADisplayMesh::AddNormal(const int Vertice1, const int Vertice2, const int V
 
 FIntPoint ADisplayMesh::GetIndexValue(const int Vertice)
 {
-	return { Vertice % MapGeneratorComp->MapWidth, Vertice / MapGeneratorComp->MapWidth };
+	return { Vertice % NoiseParameters.MapWidth, Vertice / NoiseParameters.MapWidth };
 }
 
+float ADisplayMesh::GetNoiseValueAtIndex(int x, int y)
+{
+	FastNoise noise;
+	noise.SetNoiseType(FastNoise::Perlin);
+
+	FRandomStream stream;
+	stream.Initialize(NoiseParameters.Seed);
+
+	TArray<FVector2D> octaveOffsets;
+	octaveOffsets.Reserve(NoiseParameters.Octaves);
+	octaveOffsets.Init(FVector2D::ZeroVector, NoiseParameters.Octaves);
+
+	for (int i = 0; i < NoiseParameters.Octaves; ++i)
+	{
+		float offsetX = stream.FRandRange(-100000.f, 100000.f) + NoiseParameters.Offset.X;
+		float offsetY = stream.FRandRange(-100000.f, 100000.f) + NoiseParameters.Offset.Y;
+		octaveOffsets[i] = FVector2D(offsetX, offsetY);
+	}
+
+	float maxNoiseHeight = std::numeric_limits<float>::min();
+	float minNoiseHeight = std::numeric_limits<float>::max();
+
+	float halfWidth = NoiseParameters.MapWidth / 2.f;
+	float halfHeigh = NoiseParameters.MapHeight / 2.f;
+
+	float amplitude = 1;
+	float frequency = 1;
+	float noiseHeight = 0;
+
+	for (int i = 0; i < NoiseParameters.Octaves; ++i)
+	{
+		float sampleX = (x - halfWidth) / NoiseParameters.NoiseScale * frequency;
+		float sampleY = (y - halfHeigh) / NoiseParameters.NoiseScale * frequency;
+
+		float perlinValue = noise.GetNoise(sampleX, sampleY);
+		noiseHeight += perlinValue * amplitude;
+
+		amplitude *= NoiseParameters.Persistance;
+		frequency *= NoiseParameters.Lacunarity;
+	}
+
+	noiseHeight = FMath::Abs(noiseHeight);
+	noiseHeight *= NoiseParameters.MapHeightScale;
+
+	if(ShowNoiseValue)
+		UE_LOG(LogTemp, Warning, TEXT("NoiseValue [%d, %d]: %.3f    [%d]"), x, y, noiseHeight)
+
+	if (noiseHeight > NoiseParameters.MaxHeight)
+		noiseHeight = NoiseParameters.MaxHeight;
+	if (noiseHeight < NoiseParameters.MinHeight)
+		noiseHeight = NoiseParameters.MinHeight;
+	
+	return noiseHeight;
+}

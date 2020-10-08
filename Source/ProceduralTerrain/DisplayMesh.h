@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ProceduralMeshComponent.h"
+#include "Utils/StructUtils.h"
 #include "DisplayMesh.generated.h"
 
 class UMapGeneratorComponent;
@@ -19,14 +20,15 @@ public:
 	// Sets default values for this actor's properties
 	ADisplayMesh();
 
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere)
-	UMapGeneratorComponent* MapGeneratorComp = nullptr;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FNoiseParameters NoiseParameters;
 
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere)
-		UProceduralMeshComponent* CustomMesh = nullptr;
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
+	UProceduralMeshComponent* CustomMesh = nullptr;
 
-	TArray<float> NoiseMap;
-
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool ShowNoiseValue = false;
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -34,6 +36,8 @@ protected:
 	virtual void PostActorCreated() override;
 
 	virtual void PostInitializeComponents() override;
+	
+	virtual void PostEditChangeProperty(FPropertyChangedEvent & PropertyChangedEvent) override;
 
 
 public:
@@ -41,8 +45,6 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	void AddTriangle(const int BottomLeft, const int TopLeft, const int BottomRight, int32& TriIndex, TArray<int32> &Triangles);
-
-	void GenerateNoiseMapData();
 
 	void GenerateTerrainMesh();
 
@@ -52,7 +54,9 @@ public:
 	
 	void AddNormal(const int Vertice1, const int Vertice2, const int Vertice3, const float TopLeftX, const float TopLeftY, TArray<FVector> &Normals);
 
-	FLinearColor GetNoiseColor(float noiseValue);
+	FColor GetNoiseColor(float noiseValue);
 
 	FIntPoint GetIndexValue(const int Vertice);
+
+	float GetNoiseValueAtIndex(int x, int y);
 };
